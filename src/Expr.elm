@@ -15,6 +15,7 @@ import Random.List
 type alias Key = String
 
 type alias Seconds = Int
+type alias Millis = Int
 
 type alias EntryInfo =
     { name : String
@@ -277,3 +278,12 @@ addKeyToInfo key val info =
                           Just oldVal -> Just (val::oldVal))
                  info.meta
     }
+
+duration : PlanEntry -> Seconds
+duration entry =
+    case entry of
+        Action info -> info.duration
+
+        Gap seconds -> seconds
+
+        Announce _ -> 0

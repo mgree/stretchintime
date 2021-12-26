@@ -43,10 +43,16 @@ defaultConfig =
     , twelveHour = True
     }
 
+type alias CurrentEntry =
+    { entry : PlanEntry
+    , totalTime : Seconds
+    , elapsed : Millis
+    }
+
 type alias Model = 
     { expr : Expr
     , completed : Plan
-    , current : Maybe PlanEntry
+    , current : Maybe CurrentEntry
     , pending : Plan
     , time : Time.Posix
     , seed : Random.Seed
@@ -105,11 +111,24 @@ update msg model =
             |> withZone newZone
             , Cmd.none)
 
-        Tick newTime -> ( model |> withTime newTime -- TODO check timers
-                        , Cmd.none)
+        Tick newTime -> model |> withTime newTime |> advancePlan 
                   
-        NewSeed newSeed -> ( model |> withSeed newSeed |> resetPlan
-                           , Cmd.none)
+        NewSeed newSeed -> model |> withSeed newSeed |> resetPlan |> advancePlan
+
+advancePlan : Model -> (Model, Cmd Msg)
+advancePlan model =
+    case model.current of
+        Nothing -> 
+            case model.pending of
+                [] -> (model, Cmd.none)
+                (entry::entries) -> ( { model | pending = entries
+                                              , current = Just { entry = entry
+                                                               , totalTime = duration entry
+                                                               , elapsed = 0
+                                                               }
+                                      }
+                                    , Cmd.none)
+        Just info -> Debug.todo "see if we're done"
 
 --------------------------------------------------------------------------------
 -- SUBSCRIPTIONS
@@ -133,8 +152,8 @@ view model =
         , div [ class "current" ]
               (case model.current of
                   Nothing -> []
-                  Just entry -> [ h2 [] [text "current"]
-                                , viewEntry entry])
+                  Just info -> [ h2 [] [text "current"]
+                                , viewEntry info.entry])
         , div [ class "pending" ]
               [ h2 [] [text "pending"]
               , ol [] (model.pending |> List.map (\entry -> ul [] [viewEntry entry]))
