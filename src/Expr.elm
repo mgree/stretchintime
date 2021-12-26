@@ -28,7 +28,7 @@ type alias IntersperseInfo =
 
 type Expr = Entry EntryInfo
           | Pause Seconds
-          | Message String -- TODO
+          | Message String
           | Vary Key (List String) Expr
           | Repeat Int Expr -- TODO
           | Group Key Expr
@@ -47,15 +47,17 @@ type alias ActionInfo =
 
 type PlanEntry = Action ActionInfo
                | Gap Seconds
-               | Announce String -- TODO
+               | Announce String
 
-type ExprError = VaryEmpty Key Expr
-               | VaryEmptyName (List String) Expr
-               | VaryGroup (List String) Expr
-               | GroupEmptyName Expr
-               | EntryEmptyName EntryInfo
+type ExprError = EntryEmptyName EntryInfo
                | EntryInvalidTime EntryInfo
                | PauseInvalidTime Seconds
+               | MessageEmpty
+               | VaryEmpty Key Expr
+               | VaryEmptyName (List String) Expr
+               | VaryGroup (List String) Expr
+               | RepeatInvalidCount Int Expr
+               | GroupEmptyName Expr
                | EmptySeq
 
 check : Expr -> List ExprError
@@ -75,6 +77,11 @@ check exprOuter =
              then [PauseInvalidTime seconds]
              else [])
 
+        Message msg -> 
+            (if String.isEmpty msg
+             then [MessageEmpty]
+             else [])
+
         Vary key options expr ->
             (if key == "group"
              then [VaryGroup options expr]
@@ -86,6 +93,13 @@ check exprOuter =
             ++
             (if List.isEmpty options
              then [VaryEmpty key expr]
+             else [])
+            ++
+            check expr
+
+        Repeat count expr ->
+            (if count <= 0
+             then [RepeatInvalidCount count expr]
              else [])
             ++
             check expr
@@ -115,6 +129,9 @@ toPlan exprOuter =
         Pause seconds -> 
             [ Gap seconds ]
 
+        Message msg ->
+            [ Announce msg ]
+
         Vary key optionList expr -> 
             let entries = toPlan expr
 
@@ -126,6 +143,11 @@ toPlan exprOuter =
             List.concatMap 
                 (\option -> List.map (addKeyToEntry key option) entries)
                 options
+
+        Repeat count expr ->
+            let entries = toPlan expr in
+
+            List.concat (List.repeat count entries)
 
         Group group expr -> 
             List.map (addKeyToEntry "group" group) (toPlan expr)
@@ -162,6 +184,8 @@ addKeyToEntry key val entry =
             Action (addKeyToInfo key val info)
                        
         Gap _ -> entry
+
+        Announce _ -> entry
 
 addKeyToInfo : Key -> String -> ActionInfo -> ActionInfo
 addKeyToInfo key val info =

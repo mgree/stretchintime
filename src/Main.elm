@@ -54,12 +54,15 @@ configWithZone newZone config = { config | zone = newZone }
 
 sampleExpr = 
     Intersperse
-    { sep = Pause 10
+    { sep = Seq [Pause 7, Message "3 seconds...", Pause 3]
     , expr = Group "standing" 
              (Seq [ Entry { name =  "forward fold", duration = 60 }
-                 , Vary "side" ["right", "left"]
-                     (Entry { name = "quad", duration = 60 })
-                 ]
+                  , Vary "side" ["right", "left"]
+                      (Entry { name = "quad", duration = 60 })
+                  , Repeat 3
+                      (Vary "side" ["right", "left"]
+                           (Entry { name = "glute", duration = 60 }))
+                  ]
              )
     , before = True
     , after = False
@@ -75,10 +78,10 @@ init () = ( { state = sampleExpr
 
 view : Model -> Html a
 view model = 
-    h1 [ class "clock" ]
-       ([ text (clockTime model.config model.time) ]
-        ++
-        (model.state |> toPlan |> List.map viewEntry))
+    div [ ]
+        ([ h1 [ class "clock" ]
+              [ text (clockTime model.config model.time) ]        
+         ] ++ (model.state |> toPlan |> List.map viewEntry))
 
 viewEntry : PlanEntry -> Html a
 viewEntry entry =
@@ -107,6 +110,11 @@ viewEntry entry =
                 [ text "rest "
                 , span [ class "duration" ] [ seconds |> String.fromInt |> text ] 
                 ]
+
+        Announce msg ->
+            div [ class "entry", class "announce" ]
+                [ text msg ]
+
 
 clockTime : Config -> Time.Posix -> String
 clockTime config time = 
