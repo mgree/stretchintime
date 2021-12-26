@@ -32,6 +32,7 @@ type Expr = Entry EntryInfo
           | Group Key Expr
           | Seq (List Expr)
           | Intersperse IntersperseInfo
+            -- shuffle (needs generators w/ step :/)
 
 type alias Plan = List PlanEntry
 
