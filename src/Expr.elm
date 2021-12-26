@@ -38,6 +38,24 @@ type Expr = Entry EntryInfo
           | Shuffle Expr
           | Intersperse IntersperseInfo
 
+sampleExpr = 
+    Intersperse
+    { sep = Seq [Pause 7, Message "3 seconds...", Pause 3]
+    , expr = Group "standing" 
+             (Seq [ Entry { name =  "forward fold", duration = 60 }
+                  , Vary "side" ["right", "left"]
+                      (Entry { name = "quad", duration = 60 })
+                  , Repeat 3
+                      (Vary "side" ["right", "left"]
+                           (Entry { name = "glute", duration = 60 }))
+                  ]
+             )
+    , before = True
+    , after = False
+    }
+
+sampleExpr2 = Shuffle (Seq [Message "one", Message "two", Message "three", Message "four"])
+
 type alias Plan = List PlanEntry
 
 type alias ActionInfo =

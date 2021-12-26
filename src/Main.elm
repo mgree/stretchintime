@@ -24,6 +24,10 @@ main = Browser.element
        , subscriptions = subscriptions
        }
 
+--------------------------------------------------------------------------------
+-- MSG and CONFIG and MODEL
+--------------------------------------------------------------------------------
+
 type Msg = Tick Time.Posix
          | InitializeTime Time.Zone Time.Posix
          | NewSeed Random.Seed
@@ -40,7 +44,10 @@ defaultConfig =
     }
 
 type alias Model = 
-    { state : Expr
+    { expr : Expr
+    , completed : Plan
+    , current : Maybe PlanEntry
+    , pending : Plan
     , time : Time.Posix
     , seed : Random.Seed
     , config : Config
@@ -58,26 +65,24 @@ configWithZone newZone config = { config | zone = newZone }
 withSeed : Random.Seed -> Model -> Model
 withSeed newSeed model = { model | seed = newSeed }
 
-sampleExpr = 
-    Intersperse
-    { sep = Seq [Pause 7, Message "3 seconds...", Pause 3]
-    , expr = Group "standing" 
-             (Seq [ Entry { name =  "forward fold", duration = 60 }
-                  , Vary "side" ["right", "left"]
-                      (Entry { name = "quad", duration = 60 })
-                  , Repeat 3
-                      (Vary "side" ["right", "left"]
-                           (Entry { name = "glute", duration = 60 }))
-                  ]
-             )
-    , before = True
-    , after = False
+resetPlan : Model -> Model
+resetPlan model = 
+    let (plan, seed1) = toPlan model.expr model.seed in
+    { model | completed = []
+            , current = Nothing
+            , pending = plan
+            , seed = seed1    
     }
 
-sampleExpr2 = Shuffle (Seq [Message "one", Message "two", Message "three", Message "four"])
+--------------------------------------------------------------------------------
+-- INIT
+--------------------------------------------------------------------------------
 
 init : () -> (Model, Cmd Msg)
-init () = ( { state = sampleExpr2
+init () = ( { expr = Expr.sampleExpr2
+            , completed = []
+            , current = Nothing
+            , pending = []
             , time = Time.millisToPosix 0
             , config = defaultConfig
             , seed = Random.initialSeed 0
@@ -87,12 +92,58 @@ init () = ( { state = sampleExpr2
                       ]
           )
 
+--------------------------------------------------------------------------------
+-- UPDATE
+--------------------------------------------------------------------------------
+
+update : Msg -> Model -> (Model, Cmd Msg)
+update msg model =
+    case msg of
+        InitializeTime newZone newTime ->
+            ( model 
+            |> withTime newTime 
+            |> withZone newZone
+            , Cmd.none)
+
+        Tick newTime -> ( model |> withTime newTime -- TODO check timers
+                        , Cmd.none)
+                  
+        NewSeed newSeed -> ( model |> withSeed newSeed |> resetPlan
+                           , Cmd.none)
+
+--------------------------------------------------------------------------------
+-- SUBSCRIPTIONS
+--------------------------------------------------------------------------------
+
+subscriptions : Model -> Sub Msg
+subscriptions model = 
+    Sub.batch 
+        [ Time.every 250 Tick 
+        ]
+
+--------------------------------------------------------------------------------
+-- VIEW
+--------------------------------------------------------------------------------
+
 view : Model -> Html a
 view model = 
     div [ ]
-        ([ h1 [ class "clock" ]
-              [ text (clockTime model.config model.time) ]        
-         ] ++ (toPlan model.state model.seed |> Tuple.first |> List.map viewEntry))
+        [ h1 [ class "clock" ]
+             [ text (clockTime model.config model.time) ]
+        , div [ class "current" ]
+              (case model.current of
+                  Nothing -> []
+                  Just entry -> [ h2 [] [text "current"]
+                                , viewEntry entry])
+        , div [ class "pending" ]
+              [ h2 [] [text "pending"]
+              , ol [] (model.pending |> List.map (\entry -> ul [] [viewEntry entry]))
+              ]
+        , div [ class "completed" ]
+              [ h2 [] [text "completed"]
+              , ol [] (model.completed |> List.map (\entry -> ul [] [viewEntry entry]))
+              ]
+        ] 
 
 viewEntry : PlanEntry -> Html a
 viewEntry entry =
@@ -152,27 +203,6 @@ formatHour config baseHour =
 
 twoDigitInt : Int -> String
 twoDigitInt n = String.padLeft 2 '0' (String.fromInt n)
-
-update : Msg -> Model -> (Model, Cmd Msg)
-update msg model =
-    case msg of
-        InitializeTime newZone newTime ->
-            ( model 
-            |> withTime newTime 
-            |> withZone newZone
-            , Cmd.none)
-
-        Tick newTime -> ( model |> withTime newTime -- TODO check timers
-                        , Cmd.none)
-                  
-        NewSeed newSeed -> ( model |> withSeed newSeed
-                           , Cmd.none)
-
-subscriptions : Model -> Sub Msg
-subscriptions model = 
-    Sub.batch 
-        [ Time.every 250 Tick 
-        ]
 
 timeDifference : Time.Posix -> Time.Posix -> Seconds
 timeDifference timeNow timeThen =
