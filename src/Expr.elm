@@ -9,6 +9,8 @@ module Expr exposing (..)
 -}
 
 import Dict exposing (Dict)
+import Random
+import Random.List
 
 type alias Key = String
 
@@ -30,11 +32,11 @@ type Expr = Entry EntryInfo
           | Pause Seconds
           | Message String
           | Vary Key (List String) Expr
-          | Repeat Int Expr -- TODO
+          | Repeat Int Expr
           | Group Key Expr
           | Seq (List Expr)
+          | Shuffle Expr
           | Intersperse IntersperseInfo
-            -- shuffle (needs generators w/ step :/)
 
 type alias Plan = List PlanEntry
 
@@ -58,7 +60,43 @@ type ExprError = EntryEmptyName EntryInfo
                | VaryGroup (List String) Expr
                | RepeatInvalidCount Int Expr
                | GroupEmptyName Expr
+               | ShuffleSingleton Expr
                | EmptySeq
+
+countExpr : Expr -> Int
+countExpr exprOuter =
+    case exprOuter of
+        Entry _ -> 1
+
+        Pause _ -> 1
+
+        Message _ -> 1
+
+        Vary _ options expr ->
+            List.length options * countExpr expr
+
+        Repeat count expr ->
+            count * countExpr expr
+
+        Group _ expr ->
+            countExpr expr
+
+        Seq exprs ->
+            List.sum (List.map countExpr exprs)
+
+        Shuffle expr ->
+            countExpr expr
+
+        Intersperse info ->
+            let sepCount = countExpr info.sep
+                exprCount = countExpr info.expr
+
+                seps = exprCount - 1 + 
+                       (if info.before then 1 else 0) +
+                       (if info.after then 1 else 0)
+            in
+
+                seps * sepCount + exprCount
 
 check : Expr -> List ExprError
 check exprOuter = 
@@ -117,47 +155,70 @@ check exprOuter =
         Seq exprs -> 
             List.concatMap check exprs
 
+        Shuffle expr -> 
+            (if countExpr expr == 1
+             then [ShuffleSingleton expr]
+             else [])
+            ++
+            check expr
+
         Intersperse info ->
             check info.sep ++ check info.expr
 
-toPlan : Expr -> Plan
-toPlan exprOuter =
+
+toPlan : Expr -> Random.Seed -> (Plan, Random.Seed)
+toPlan exprOuter seed0 =
     case exprOuter of
         Entry info -> 
-            [ Action (entryToAction info) ]
+            ([ Action (entryToAction info) ], seed0)
                 
         Pause seconds -> 
-            [ Gap seconds ]
+            ([ Gap seconds ], seed0)
 
         Message msg ->
-            [ Announce msg ]
+            ([ Announce msg ], seed0)
 
         Vary key optionList expr -> 
-            let entries = toPlan expr
+            let (entries, seed1) = toPlan expr seed0
 
                 options = case optionList of
                               [] -> [key]
                               _ -> optionList
             in
 
-            List.concatMap 
-                (\option -> List.map (addKeyToEntry key option) entries)
-                options
+            ( List.concatMap 
+                  (\option -> List.map (addKeyToEntry key option) entries)
+                  options
+            , seed1)
 
         Repeat count expr ->
-            let entries = toPlan expr in
+            let (entries, seed1) = toPlan expr seed0 in
 
-            List.concat (List.repeat count entries)
+            ( List.concat (List.repeat count entries)
+            , seed0)
 
         Group group expr -> 
-            List.map (addKeyToEntry "group" group) (toPlan expr)
+            let (entries, seed1) = toPlan expr seed0 in
+
+            ( List.map (addKeyToEntry "group" group) entries
+            , seed1)
 
         Seq exprs -> 
-            List.concatMap toPlan exprs
+            List.foldr
+                (\expr (allEntries,seed1) ->
+                     let (entries, seed2) = toPlan expr seed1 in
+                     (entries ++ allEntries, seed2))
+                ([], seed0)
+                exprs
+
+        Shuffle expr ->
+            let (entries, seed1) = toPlan expr seed0 in
+            
+            Random.step (Random.List.shuffle entries) seed1
 
         Intersperse info ->
-            let sepPlan = toPlan info.sep
-                exprPlan = toPlan info.expr 
+            let (sepPlan, seed1) = toPlan info.sep seed0
+                (exprPlan, seed2) = toPlan info.expr seed1
 
                 -- intersperse, but with a list sep
                 combine : List a -> List a -> List a
@@ -167,9 +228,10 @@ toPlan exprOuter =
                         [e] -> [e]
                         e::es -> [e] ++ sep ++ combine sep es
             in          
-                (if info.before then sepPlan else []) ++
-                combine sepPlan exprPlan ++
-                (if info.after then sepPlan else [])
+                ( (if info.before then sepPlan else []) ++
+                  combine sepPlan exprPlan ++
+                  (if info.after then sepPlan else [])
+                , seed2)
             
 entryToAction : EntryInfo -> ActionInfo
 entryToAction info = { name = info.name

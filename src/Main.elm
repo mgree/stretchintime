@@ -4,6 +4,7 @@ import Browser
 import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
+import Random
 import Task
 import Time
 
@@ -25,6 +26,7 @@ main = Browser.element
 
 type Msg = Tick Time.Posix
          | InitializeTime Time.Zone Time.Posix
+         | NewSeed Random.Seed
 
 type alias Config = 
     { zone : Time.Zone
@@ -40,6 +42,7 @@ defaultConfig =
 type alias Model = 
     { state : Expr
     , time : Time.Posix
+    , seed : Random.Seed
     , config : Config
     }
 
@@ -51,6 +54,9 @@ withZone newZone model = { model | config = model.config |> configWithZone newZo
 
 configWithZone : Time.Zone -> Config -> Config
 configWithZone newZone config = { config | zone = newZone }
+
+withSeed : Random.Seed -> Model -> Model
+withSeed newSeed model = { model | seed = newSeed }
 
 sampleExpr = 
     Intersperse
@@ -68,12 +74,17 @@ sampleExpr =
     , after = False
     }
 
+sampleExpr2 = Shuffle (Seq [Message "one", Message "two", Message "three", Message "four"])
+
 init : () -> (Model, Cmd Msg)
-init () = ( { state = sampleExpr
+init () = ( { state = sampleExpr2
             , time = Time.millisToPosix 0
             , config = defaultConfig
+            , seed = Random.initialSeed 0
             }
-          , Task.perform (\x -> x) (Task.map2 InitializeTime Time.here Time.now)
+          , Cmd.batch [ Task.perform (\x -> x) (Task.map2 InitializeTime Time.here Time.now)
+                      , Random.generate NewSeed Random.independentSeed
+                      ]
           )
 
 view : Model -> Html a
@@ -81,7 +92,7 @@ view model =
     div [ ]
         ([ h1 [ class "clock" ]
               [ text (clockTime model.config model.time) ]        
-         ] ++ (model.state |> toPlan |> List.map viewEntry))
+         ] ++ (toPlan model.state model.seed |> Tuple.first |> List.map viewEntry))
 
 viewEntry : PlanEntry -> Html a
 viewEntry entry =
@@ -154,6 +165,9 @@ update msg model =
         Tick newTime -> ( model |> withTime newTime -- TODO check timers
                         , Cmd.none)
                   
+        NewSeed newSeed -> ( model |> withSeed newSeed
+                           , Cmd.none)
+
 subscriptions : Model -> Sub Msg
 subscriptions model = 
     Sub.batch 
