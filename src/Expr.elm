@@ -28,7 +28,9 @@ type alias IntersperseInfo =
 
 type Expr = Entry EntryInfo
           | Pause Seconds
+          | Message String -- TODO
           | Vary Key (List String) Expr
+          | Repeat Int Expr -- TODO
           | Group Key Expr
           | Seq (List Expr)
           | Intersperse IntersperseInfo
@@ -45,6 +47,7 @@ type alias ActionInfo =
 
 type PlanEntry = Action ActionInfo
                | Gap Seconds
+               | Announce String -- TODO
 
 type ExprError = VaryEmpty Key Expr
                | VaryEmptyName (List String) Expr
