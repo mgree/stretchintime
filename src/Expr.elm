@@ -12,11 +12,11 @@ import Dict exposing (Dict)
 
 type alias Key = String
 
-type alias Millis = Int
+type alias Seconds = Int
 
 type alias EntryInfo =
     { name : String
-    , duration : Millis
+    , duration : Seconds
     }
 
 type alias IntersperseInfo =
@@ -27,7 +27,7 @@ type alias IntersperseInfo =
     }
 
 type Expr = Entry EntryInfo
-          | Pause Millis
+          | Pause Seconds
           | Vary Key (List String) Expr
           | Group Key Expr
           | Seq (List Expr)
@@ -39,12 +39,12 @@ type alias Plan = List PlanEntry
 type alias ActionInfo =
     { name : String
     , meta : Dict Key (List String)
-    , duration : Millis
+    , duration : Seconds
     }
 
 
 type PlanEntry = Action ActionInfo
-               | Gap Millis
+               | Gap Seconds
 
 type ExprError = VaryEmpty Key Expr
                | VaryEmptyName (List String) Expr
@@ -52,7 +52,7 @@ type ExprError = VaryEmpty Key Expr
                | GroupEmptyName Expr
                | EntryEmptyName EntryInfo
                | EntryInvalidTime EntryInfo
-               | PauseInvalidTime Millis
+               | PauseInvalidTime Seconds
                | EmptySeq
 
 check : Expr -> List ExprError
@@ -67,9 +67,9 @@ check exprOuter =
              then [EntryInvalidTime info]
              else [])
 
-        Pause millis ->
-            (if millis <= 0
-             then [PauseInvalidTime millis]
+        Pause seconds ->
+            (if seconds <= 0
+             then [PauseInvalidTime seconds]
              else [])
 
         Vary key options expr ->
@@ -109,8 +109,8 @@ toPlan exprOuter =
         Entry info -> 
             [ Action (entryToAction info) ]
                 
-        Pause millis -> 
-            [ Gap millis ]
+        Pause seconds -> 
+            [ Gap seconds ]
 
         Vary key optionList expr -> 
             let entries = toPlan expr

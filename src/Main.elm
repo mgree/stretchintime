@@ -1,10 +1,20 @@
 module Main exposing (..)
 
 import Browser
+import Dict
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Task
 import Time
+
+import Expr exposing (..)
+
+{- TODO
+
+   crib checkTimers for core logic for running task
+   keep index of the current one
+
+-}
 
 main = Browser.element
        { init = init
@@ -15,8 +25,6 @@ main = Browser.element
 
 type Msg = Tick Time.Posix
          | InitializeTime Time.Zone Time.Posix
-
-type alias State = ()
 
 type alias Config = 
     { zone : Time.Zone
@@ -30,7 +38,7 @@ defaultConfig =
     }
 
 type alias Model = 
-    { state : State
+    { state : Expr
     , time : Time.Posix
     , config : Config
     }
@@ -44,18 +52,61 @@ withZone newZone model = { model | config = model.config |> configWithZone newZo
 configWithZone : Time.Zone -> Config -> Config
 configWithZone newZone config = { config | zone = newZone }
 
+sampleExpr = 
+    Intersperse
+    { sep = Pause 10
+    , expr = Group "standing" 
+             (Seq [ Entry { name =  "forward fold", duration = 60 }
+                 , Vary "side" ["right", "left"]
+                     (Entry { name = "quad", duration = 60 })
+                 ]
+             )
+    , before = True
+    , after = False
+    }
+
 init : () -> (Model, Cmd Msg)
-init () = ( { state = ()
+init () = ( { state = sampleExpr
             , time = Time.millisToPosix 0
             , config = defaultConfig
             }
           , Task.perform (\x -> x) (Task.map2 InitializeTime Time.here Time.now)
           )
 
-view : Model -> Html Msg
+view : Model -> Html a
 view model = 
     h1 [ class "clock" ]
-       [ text (clockTime model.config model.time) ]
+       ([ text (clockTime model.config model.time) ]
+        ++
+        (model.state |> toPlan |> List.map viewEntry))
+
+viewEntry : PlanEntry -> Html a
+viewEntry entry =
+    case entry of
+        Action info ->
+            div [ class "entry", class "action" ]
+                [ span [ class "name" ] [ text info.name ]
+                , span [ class "duration" ] [ info.duration |> String.fromInt |> text ]
+                , div [ class "meta" ]
+                    (   info.meta
+                     |> Dict.toList
+                     |> List.map 
+                            (\(k,vs) ->
+                                 div [ class "kv" ]
+                                   [ span [ class "key" ]
+                                          [ text k ]
+                                   , ol [ class "values" ]
+                                       (List.map (\v -> ul [] [ text v]) vs)
+                                   ]
+                            )
+                    )
+                ]
+
+        Gap seconds ->
+            div [ class "entry", class "gap" ]
+                [ text "rest "
+                , span [ class "duration" ] [ seconds |> String.fromInt |> text ] 
+                ]
 
 clockTime : Config -> Time.Posix -> String
 clockTime config time = 
@@ -101,4 +152,8 @@ subscriptions model =
         [ Time.every 250 Tick 
         ]
 
-
+timeDifference : Time.Posix -> Time.Posix -> Seconds
+timeDifference timeNow timeThen =
+    let nowFloored  = Time.posixToMillis timeNow // 1000
+        thenFloored = (Time.posixToMillis timeThen // 1000)
+    in abs (nowFloored - thenFloored)
