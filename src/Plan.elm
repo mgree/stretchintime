@@ -73,8 +73,15 @@ entryToString : Entry -> String
 entryToString entry =
     case entry of
 
-        Action info -> Debug.todo "action"
+        Action info -> info.name ++ " " ++ 
+                       formatHMS info.duration ++ " " ++
+                       (  info.meta 
+                       |> Dict.toList 
+                       |> List.map 
+                              (\(k,vs) -> k ++ ": " ++ String.join " " vs)
+                       |> String.join ",")
+                            
 
-        Pause seconds -> Debug.todo "gap"
+        Pause seconds -> "pause " ++ formatHMS seconds
 
-        Announce msg -> Debug.todo "announce"
+        Announce msg -> "announce " ++ msg

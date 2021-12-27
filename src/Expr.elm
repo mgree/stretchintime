@@ -15,7 +15,7 @@ import Random.List
 import Common exposing (..)
 import Plan exposing (..)
 
-type alias EntryInfo =
+type alias ActionInfo =
     { name : String
     , duration : Seconds
     }
@@ -27,7 +27,7 @@ type alias IntersperseInfo =
     , after : Bool
     }
 
-type Expr = Entry EntryInfo
+type Expr = Action ActionInfo
           | Pause Seconds
           | Message String
           | Vary Key (List String) Expr
@@ -39,12 +39,12 @@ type Expr = Entry EntryInfo
 sampleExpr = 
     Intersperse
     { sep = Seq [Pause 7, Message "3 seconds...", Pause 3]
-    , expr = Seq [ Entry { name =  "forward fold", duration = 60 }
+    , expr = Seq [ Action { name =  "forward fold", duration = 60 }
                   , Vary "side" ["right", "left"]
-                      (Entry { name = "quad", duration = 60 })
+                      (Action { name = "quad", duration = 60 })
                   , Repeat 3
                       (Vary "side" ["right", "left"]
-                           (Entry { name = "glute", duration = 60 }))
+                           (Action { name = "glute", duration = 60 }))
                   ]
     , before = True
     , after = False
@@ -52,8 +52,8 @@ sampleExpr =
 
 sampleExpr2 = Shuffle (Seq [Message "one", Message "two", Message "three", Message "four"])
 
-type ExprError = EntryEmptyName EntryInfo
-               | EntryInvalidTime EntryInfo
+type ExprError = ActionEmptyName ActionInfo
+               | ActionInvalidTime ActionInfo
                | PauseInvalidTime Seconds
                | MessageEmpty
                | VaryEmpty Key Expr
@@ -65,7 +65,7 @@ type ExprError = EntryEmptyName EntryInfo
 countExpr : Expr -> Int
 countExpr exprOuter =
     case exprOuter of
-        Entry _ -> 1
+        Action _ -> 1
 
         Pause _ -> 1
 
@@ -97,13 +97,13 @@ countExpr exprOuter =
 check : Expr -> List ExprError
 check exprOuter = 
     case exprOuter of
-        Entry info -> 
+        Action info -> 
             (if String.isEmpty info.name
-             then [EntryEmptyName info]
+             then [ActionEmptyName info]
              else [])
             ++
             (if info.duration <= 0
-             then [EntryInvalidTime info]
+             then [ActionInvalidTime info]
              else [])
 
         Pause seconds ->
@@ -154,8 +154,8 @@ check exprOuter =
 toPlan : Expr -> Random.Seed -> (Plan, Random.Seed)
 toPlan exprOuter seed0 =
     case exprOuter of
-        Entry info -> 
-            ([ Plan.Action (entryToAction info) ], seed0)
+        Action info -> 
+            ([ Plan.Action (infoToPlanActionInfo info) ], seed0)
                 
         Pause seconds -> 
             ([ Plan.Pause seconds ], seed0)
@@ -212,10 +212,11 @@ toPlan exprOuter seed0 =
                   (if info.after then sepPlan else [])
                 , seed2)
             
-entryToAction : EntryInfo -> ActionInfo
-entryToAction info = { name = info.name
-                     , meta = Dict.empty
-                     , duration = info.duration
-                     }
+infoToPlanActionInfo : ActionInfo -> Plan.ActionInfo
+infoToPlanActionInfo info = 
+    { name = info.name
+    , meta = Dict.empty
+    , duration = info.duration
+    }
 
 
