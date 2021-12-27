@@ -10,13 +10,6 @@ import Time
 
 import Expr exposing (..)
 
-{- TODO
-
-   crib checkTimers for core logic for running task
-   keep index of the current one
-
--}
-
 main = Browser.element
        { init = init
        , view = view
@@ -45,8 +38,9 @@ defaultConfig =
 
 type alias CurrentEntry =
     { entry : PlanEntry
-    , totalTime : Seconds
+    , duration : Seconds
     , elapsed : Millis
+    , last : Time.Posix
     }
 
 type alias Model = 
@@ -85,7 +79,7 @@ resetPlan model =
 --------------------------------------------------------------------------------
 
 init : () -> (Model, Cmd Msg)
-init () = ( { expr = Expr.sampleExpr2
+init () = ( { expr = Expr.sampleExpr
             , completed = []
             , current = Nothing
             , pending = []
@@ -120,15 +114,48 @@ advancePlan model =
     case model.current of
         Nothing -> 
             case model.pending of
-                [] -> (model, Cmd.none)
-                (entry::entries) -> ( { model | pending = entries
-                                              , current = Just { entry = entry
-                                                               , totalTime = duration entry
-                                                               , elapsed = 0
-                                                               }
-                                      }
-                                    , Cmd.none)
-        Just info -> Debug.todo "see if we're done"
+                [] -> -- all done
+                    (model, Cmd.none)
+                (entry::entries) -> -- pick off the next pending entry
+                    ( { model | pending = entries
+                              , current = Just { entry = entry
+                                               , duration = duration entry
+                                               , elapsed = 0
+                                               , last = model.time
+                                               }
+                      }
+                    , Cmd.none)
+        Just info0 -> 
+            let
+                -- computation in milliseconds
+
+                now : Millis
+                now = Time.posixToMillis model.time
+
+                last : Millis
+                last = Time.posixToMillis info0.last
+
+                sinceLast : Millis
+                sinceLast = now - last
+
+                info1 = { info0 | elapsed = info0.elapsed + sinceLast 
+                                , last = model.time
+                        }
+
+                -- convert to seconds to see if we're done
+                elapsed : Seconds
+                elapsed = info1.elapsed // 1000
+
+            in
+
+                if elapsed >= info1.duration
+                then
+                    { model | current = Nothing 
+                            , completed = model.completed ++ [info1.entry]
+                    } |> advancePlan
+                else
+                    ( { model | current = Just info1 }
+                    , Cmd.none)
 
 --------------------------------------------------------------------------------
 -- SUBSCRIPTIONS
@@ -147,13 +174,13 @@ subscriptions model =
 view : Model -> Html a
 view model = 
     div [ ]
-        [ h1 [ class "clock" ]
-             [ text (clockTime model.config model.time) ]
-        , div [ class "current" ]
+        [ div [ class "current" ]
               (case model.current of
                   Nothing -> []
                   Just info -> [ h2 [] [text "current"]
-                                , viewEntry info.entry])
+                                , viewEntry info.entry
+                                , viewRemaining info
+                               ])
         , div [ class "pending" ]
               [ h2 [] [text "pending"]
               , ol [] (model.pending |> List.map (\entry -> ul [] [viewEntry entry]))
@@ -163,6 +190,19 @@ view model =
               , ol [] (model.completed |> List.map (\entry -> ul [] [viewEntry entry]))
               ]
         ] 
+
+viewRemaining : CurrentEntry -> Html a
+viewRemaining info =
+    let 
+        elapsed : Seconds
+        elapsed = info.elapsed // 1000
+
+        remaining : Seconds
+        remaining = info.duration - elapsed
+    in
+        
+    span [ class "remaining" ]
+         [ remaining |> formatHMS |> text ]
 
 viewEntry : PlanEntry -> Html a
 viewEntry entry =
@@ -196,35 +236,30 @@ viewEntry entry =
             div [ class "entry", class "announce" ]
                 [ text msg ]
 
-
-clockTime : Config -> Time.Posix -> String
-clockTime config time = 
-  let baseHour  = Time.toHour config.zone time
-      hour      = formatHour config baseHour
-      minute    = twoDigitInt    (Time.toMinute config.zone time)
-      second    = twoDigitInt    (Time.toSecond config.zone time)
-      ampm      = if config.twelveHour
-                  then if baseHour >= 12
-                       then "pm"
-                       else "am"
-                  else ""
-  in
-  hour ++ ":" ++ minute ++ ":" ++ second ++ ampm
-
-formatHour : Config -> Int -> String
-formatHour config baseHour =
-    let hourNum = if config.twelveHour
-                  then modBy 12 baseHour
-                  else baseHour
-        hour12  = if hourNum == 0 then 12 else hourNum
+formatHMS : Seconds -> String
+formatHMS totalSeconds =
+    let (hours, minutes, seconds) = secondsToHMS totalSeconds in
+    let strs = [ if hours > 0 then String.fromInt hours ++ ":" else ""
+               , if hours > 0
+                 then twoDigitInt minutes
+                 else if minutes > 0
+                      then String.fromInt minutes
+                      else ""
+               , if hours > 0 || minutes > 0
+                 then twoDigitInt seconds
+                 else String.fromInt seconds
+               ]
     in
-        String.fromInt hour12
+    List.filter (not << String.isEmpty) strs |> String.join ":"
+
+secondsToHMS : Seconds -> (Int, Int, Seconds)
+secondsToHMS totalSeconds =              
+    let seconds = modBy 60 totalSeconds in
+    let totalMinutes = totalSeconds // 60 in
+    let minutes = modBy 60 totalMinutes in
+    let hours = totalMinutes // 60 in
+    (hours, minutes, seconds)
 
 twoDigitInt : Int -> String
 twoDigitInt n = String.padLeft 2 '0' (String.fromInt n)
 
-timeDifference : Time.Posix -> Time.Posix -> Seconds
-timeDifference timeNow timeThen =
-    let nowFloored  = Time.posixToMillis timeNow // 1000
-        thenFloored = (Time.posixToMillis timeThen // 1000)
-    in abs (nowFloored - thenFloored)

@@ -2,7 +2,7 @@ module Expr exposing (..)
 
 {- TODO
 
- - semantics (and tests)
+ - semantics tests
  - parser (and tests)
  - pretty printer (and tests)
 
