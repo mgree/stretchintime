@@ -228,8 +228,8 @@ viewEntry entry =
                     )
                 ]
 
-        Plan.Gap seconds ->
-            div [ class "entry", class "gap" ]
+        Plan.Pause seconds ->
+            div [ class "entry", class "pause" ]
                 [ text "rest "
                 , span [ class "duration" ] [ seconds |> String.fromInt |> text ] 
                 ]

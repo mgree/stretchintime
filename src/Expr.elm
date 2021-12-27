@@ -158,7 +158,7 @@ toPlan exprOuter seed0 =
             ([ Plan.Action (entryToAction info) ], seed0)
                 
         Pause seconds -> 
-            ([ Plan.Gap seconds ], seed0)
+            ([ Plan.Pause seconds ], seed0)
 
         Message msg ->
             ([ Plan.Announce msg ], seed0)

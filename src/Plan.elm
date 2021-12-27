@@ -14,7 +14,7 @@ type alias ActionInfo =
 
 
 type Entry = Action ActionInfo
-           | Gap Seconds
+           | Pause Seconds
            | Announce String
 
 addKeyToEntry : Key -> String -> Entry -> Entry
@@ -23,7 +23,7 @@ addKeyToEntry key val entry =
         Action info -> 
             Action (addKeyToInfo key val info)
                        
-        Gap _ -> entry
+        Pause _ -> entry
 
         Announce _ -> entry
 
@@ -43,7 +43,7 @@ duration entry =
     case entry of
         Action info -> info.duration
 
-        Gap seconds -> seconds
+        Pause seconds -> seconds
 
         Announce _ -> 0
 
@@ -51,4 +51,30 @@ duration entry =
 -- PLAN PRETTY PRINTING
 --------------------------------------------------------------------------------
 
+{-
+PLAN  ::= ENTRY 
+        | ENTRY
+          PLAN
 
+ENTRY ::= NAME DURATION (NAME: VALUE)*
+        | pause DURATION
+        | announce MESSAGE
+        
+NAME     ::= [^0-9]*
+VALUE    ::= [^,]*
+DURATION ::= [[H:]M:]S
+MESSAGE  ::= [^\n]*
+-}
+
+toString : Plan -> String
+toString plan = plan |> List.map entryToString |> String.join "\n"
+
+entryToString : Entry -> String
+entryToString entry =
+    case entry of
+
+        Action info -> Debug.todo "action"
+
+        Pause seconds -> Debug.todo "gap"
+
+        Announce msg -> Debug.todo "announce"
