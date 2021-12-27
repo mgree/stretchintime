@@ -34,7 +34,6 @@ type Expr = Entry EntryInfo
           | Message String
           | Vary Key (List String) Expr
           | Repeat Int Expr
-          | Group Key Expr
           | Seq (List Expr)
           | Shuffle Expr
           | Intersperse IntersperseInfo
@@ -42,15 +41,13 @@ type Expr = Entry EntryInfo
 sampleExpr = 
     Intersperse
     { sep = Seq [Pause 7, Message "3 seconds...", Pause 3]
-    , expr = Group "standing" 
-             (Seq [ Entry { name =  "forward fold", duration = 60 }
+    , expr = Seq [ Entry { name =  "forward fold", duration = 60 }
                   , Vary "side" ["right", "left"]
                       (Entry { name = "quad", duration = 60 })
                   , Repeat 3
                       (Vary "side" ["right", "left"]
                            (Entry { name = "glute", duration = 60 }))
                   ]
-             )
     , before = True
     , after = False
     }
@@ -76,9 +73,7 @@ type ExprError = EntryEmptyName EntryInfo
                | MessageEmpty
                | VaryEmpty Key Expr
                | VaryEmptyName (List String) Expr
-               | VaryGroup (List String) Expr
                | RepeatInvalidCount Int Expr
-               | GroupEmptyName Expr
                | ShuffleSingleton Expr
                | EmptySeq
 
@@ -96,9 +91,6 @@ countExpr exprOuter =
 
         Repeat count expr ->
             count * countExpr expr
-
-        Group _ expr ->
-            countExpr expr
 
         Seq exprs ->
             List.sum (List.map countExpr exprs)
@@ -140,10 +132,6 @@ check exprOuter =
              else [])
 
         Vary key options expr ->
-            (if key == "group"
-             then [VaryGroup options expr]
-             else [])
-            ++
             (if String.isEmpty key
              then [VaryEmptyName options expr]
              else [])
@@ -157,13 +145,6 @@ check exprOuter =
         Repeat count expr ->
             (if count <= 0
              then [RepeatInvalidCount count expr]
-             else [])
-            ++
-            check expr
-
-        Group group expr ->
-            (if String.isEmpty group
-             then [GroupEmptyName expr]
              else [])
             ++
             check expr
@@ -215,12 +196,6 @@ toPlan exprOuter seed0 =
 
             ( List.concat (List.repeat count entries)
             , seed0)
-
-        Group group expr -> 
-            let (entries, seed1) = toPlan expr seed0 in
-
-            ( List.map (addKeyToEntry "group" group) entries
-            , seed1)
 
         Seq exprs -> 
             List.foldr
