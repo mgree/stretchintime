@@ -8,7 +8,9 @@ import Random
 import Task
 import Time
 
-import Expr exposing (..)
+import Common exposing (..)
+import Expr exposing (Expr)
+import Plan exposing (Plan)
 
 main = Browser.element
        { init = init
@@ -37,7 +39,7 @@ defaultConfig =
     }
 
 type alias CurrentEntry =
-    { entry : PlanEntry
+    { entry : Plan.Entry
     , duration : Seconds
     , elapsed : Millis
     , last : Time.Posix
@@ -67,7 +69,7 @@ withSeed newSeed model = { model | seed = newSeed }
 
 resetPlan : Model -> Model
 resetPlan model = 
-    let (plan, seed1) = toPlan model.expr model.seed in
+    let (plan, seed1) = Expr.toPlan model.expr model.seed in
     { model | completed = []
             , current = Nothing
             , pending = plan
@@ -119,7 +121,7 @@ advancePlan model =
                 (entry::entries) -> -- pick off the next pending entry
                     ( { model | pending = entries
                               , current = Just { entry = entry
-                                               , duration = duration entry
+                                               , duration = Plan.duration entry
                                                , elapsed = 0
                                                , last = model.time
                                                }
@@ -204,10 +206,10 @@ viewRemaining info =
     span [ class "remaining" ]
          [ remaining |> formatHMS |> text ]
 
-viewEntry : PlanEntry -> Html a
+viewEntry : Plan.Entry -> Html a
 viewEntry entry =
     case entry of
-        Action info ->
+        Plan.Action info ->
             div [ class "entry", class "action" ]
                 [ span [ class "name" ] [ text info.name ]
                 , span [ class "duration" ] [ info.duration |> String.fromInt |> text ]
@@ -226,13 +228,13 @@ viewEntry entry =
                     )
                 ]
 
-        Gap seconds ->
+        Plan.Gap seconds ->
             div [ class "entry", class "gap" ]
                 [ text "rest "
                 , span [ class "duration" ] [ seconds |> String.fromInt |> text ] 
                 ]
 
-        Announce msg ->
+        Plan.Announce msg ->
             div [ class "entry", class "announce" ]
                 [ text msg ]
 

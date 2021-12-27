@@ -12,10 +12,8 @@ import Dict exposing (Dict)
 import Random
 import Random.List
 
-type alias Key = String
-
-type alias Seconds = Int
-type alias Millis = Int
+import Common exposing (..)
+import Plan exposing (..)
 
 type alias EntryInfo =
     { name : String
@@ -53,19 +51,6 @@ sampleExpr =
     }
 
 sampleExpr2 = Shuffle (Seq [Message "one", Message "two", Message "three", Message "four"])
-
-type alias Plan = List PlanEntry
-
-type alias ActionInfo =
-    { name : String
-    , meta : Dict Key (List String)
-    , duration : Seconds
-    }
-
-
-type PlanEntry = Action ActionInfo
-               | Gap Seconds
-               | Announce String
 
 type ExprError = EntryEmptyName EntryInfo
                | EntryInvalidTime EntryInfo
@@ -170,13 +155,13 @@ toPlan : Expr -> Random.Seed -> (Plan, Random.Seed)
 toPlan exprOuter seed0 =
     case exprOuter of
         Entry info -> 
-            ([ Action (entryToAction info) ], seed0)
+            ([ Plan.Action (entryToAction info) ], seed0)
                 
         Pause seconds -> 
-            ([ Gap seconds ], seed0)
+            ([ Plan.Gap seconds ], seed0)
 
         Message msg ->
-            ([ Announce msg ], seed0)
+            ([ Plan.Announce msg ], seed0)
 
         Vary key optionList expr -> 
             let (entries, seed1) = toPlan expr seed0
@@ -233,32 +218,4 @@ entryToAction info = { name = info.name
                      , duration = info.duration
                      }
 
-addKeyToEntry : Key -> String -> PlanEntry -> PlanEntry
-addKeyToEntry key val entry =
-    case entry of
-        Action info -> 
-            Action (addKeyToInfo key val info)
-                       
-        Gap _ -> entry
 
-        Announce _ -> entry
-
-addKeyToInfo : Key -> String -> ActionInfo -> ActionInfo
-addKeyToInfo key val info =
-    { info | 
-          meta = Dict.update key 
-                 (\mOldVal -> 
-                      case mOldVal of
-                          Nothing -> Just [val]
-                          Just oldVal -> Just (val::oldVal))
-                 info.meta
-    }
-
-duration : PlanEntry -> Seconds
-duration entry =
-    case entry of
-        Action info -> info.duration
-
-        Gap seconds -> seconds
-
-        Announce _ -> 0
